@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+tmp/
+data/loan_data_2007_2014.csv
