@@ -1,0 +1,10 @@
+.venv
+__pycache__
+*.pyc
+.git
+data
+data_raw
+notebooks
+.conda
+.env
+*.md
