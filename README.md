@@ -63,3 +63,7 @@ docker run -d --name afc-cae-frontend -p 8501:8501 -e FASTAPI_BACKEND_URL="http:
 ```
 
 Open your browser and navigate to **http://localhost:8501** to use the control panel.
+
+### Sample Data
+
+If you want to try the application without your own data, sample loan datasets are available in the [`data/`](data/) folder. These are CSV files from the Lending Club dataset (2007–2014) that you can upload directly into the dashboard for testing and evaluation.
