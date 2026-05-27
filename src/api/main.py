@@ -43,28 +43,37 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 CONFIG_PATH = "config/audit_config_v1.yaml"
 
-REPORTS_DB = {}
+REPORTS_DIR = Path(os.getenv("REPORTS_DIR", "tmp/reports"))
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+
+def _report_path(run_id: str) -> Path:
+    return REPORTS_DIR / f"{run_id}.json"
+
 
 def async_pipeline_worker(run_id: str, temp_file_path: Path):
     try:
         from src.pipeline import run_full_audit_pipeline
         report_manifest = run_full_audit_pipeline(str(temp_file_path), CONFIG_PATH)
-        REPORTS_DB[run_id] = {
-            "status": "SELESAI",
-            "results": report_manifest
-        }
+        result = {"status": "SELESAI", "results": report_manifest}
     except Exception as e:
-        REPORTS_DB[run_id] = {
-            "status": "ERROR",
-            "reason": str(e)
-        }
+        result = {"status": "ERROR", "reason": str(e)}
     finally:
         if temp_file_path.exists():
             os.remove(temp_file_path)
 
+    _report_path(run_id).write_text(
+        json.dumps(_sanitize_for_json(result), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
 @app.get("/health")
 def health_check():
-    return {"status": "UP", "engine_version": "1.1", "environment": "Windows-Local"}
+    env = os.getenv("ENVIRONMENT", "production")
+    storage = "bucket" if os.getenv("REPORTS_DIR") else "local"
+    return {"status": "UP", "engine_version": "1.1", "environment": env, "storage": storage}
+
 
 @app.post("/api/v1/audit/ingest")
 async def ingest_dataset(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -81,7 +90,10 @@ async def ingest_dataset(background_tasks: BackgroundTasks, file: UploadFile = F
     with open(temp_file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    REPORTS_DB[run_id] = {"status": "DITERIMA", "filename": file.filename}
+    init = {"status": "DITERIMA", "filename": file.filename}
+    _report_path(run_id).write_text(
+        json.dumps(init, ensure_ascii=False), encoding="utf-8"
+    )
     background_tasks.add_task(async_pipeline_worker, run_id, temp_file_path)
 
     return JSONResponse(
@@ -94,8 +106,10 @@ async def ingest_dataset(background_tasks: BackgroundTasks, file: UploadFile = F
         }
     )
 
+
 @app.get("/api/v1/audit/status/{run_id}", response_class=SafeJSONResponse)
 def get_audit_status(run_id: str):
-    if run_id not in REPORTS_DB:
+    path = _report_path(run_id)
+    if not path.exists():
         raise HTTPException(status_code=404, detail="Run ID audit tidak ditemukan di dalam sistem.")
-    return REPORTS_DB[run_id]
+    return json.loads(path.read_text(encoding="utf-8"))
